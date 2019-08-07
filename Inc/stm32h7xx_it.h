@@ -61,6 +61,7 @@ void SPI1_IRQHandler(void);
 /* USER CODE BEGIN EFP */
 void EXTI1_IRQHandler(void);
 void EXTI2_IRQHandler(void);
+void TIM1_CC_IRQHandler(void);
 /* USER CODE END EFP */
 
 #ifdef __cplusplus

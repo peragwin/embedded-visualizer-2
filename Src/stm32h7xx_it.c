@@ -60,7 +60,7 @@
 extern DMA_HandleTypeDef hdma_spi1_tx;
 extern SPI_HandleTypeDef hspi1;
 /* USER CODE BEGIN EV */
-
+extern TIM_HandleTypeDef htim1;
 /* USER CODE END EV */
 
 /******************************************************************************/
@@ -227,7 +227,6 @@ void SPI1_IRQHandler(void)
   /* USER CODE END SPI1_IRQn 1 */
 }
 
-
 /* USER CODE BEGIN 1 */
 
 int lastTick = 0;
@@ -272,6 +271,10 @@ void EXTI2_IRQHandler(void)
   rotHandler(GPIO_PIN_2, state);
 
   HAL_GPIO_EXTI_IRQHandler(GPIO_PIN_2);
+}
+
+void TIM1_CC_IRQHandler(void) {
+  HAL_TIM_IRQHandler(&htim1);
 }
 /* USER CODE END 1 */
 /************************ (C) COPYRIGHT STMicroelectronics *****END OF FILE****/
