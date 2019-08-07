@@ -177,6 +177,24 @@ SECTIONS
     . = ALIGN(8);
   } >DTCMRAM
 
+  /* Define a location on D1 for the I2S DMA buffer */
+  /* D1 is accessible by the MDMA device */
+  .i2s_dma_buffer :
+  {
+    . = ALIGN(4);
+
+    *(.i2s_dma_buffer)
+
+  } >RAM_D1
+
+  /* Define a location on D2 for the SPI DMA buffer */
+  .spi_dma_buffer :
+  {
+   . = ALIGN(4);
+    
+   *(.dma_buffer)
+    
+  } >RAM_D2
   
 
   /* Remove information from the standard libraries */

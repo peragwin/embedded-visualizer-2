@@ -69,7 +69,9 @@ Src/hal.c \
 Src/init.c \
 Src/loop.c \
 Src/ssd1331.c \
-Src/rotary.c
+Src/rotary.c \
+Src/color.c \
+Src/apa107.c
 
 # ASM sources
 ASM_SOURCES =  \
