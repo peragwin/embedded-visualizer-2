@@ -62,6 +62,8 @@ extern DMA_HandleTypeDef hdma_spi1_tx;
 extern SPI_HandleTypeDef hspi1;
 /* USER CODE BEGIN EV */
 extern TIM_HandleTypeDef htim1;
+extern MDMA_HandleTypeDef hmdma_mdma_channel40_sw_0;
+extern MDMA_HandleTypeDef hmdma_mdma_channel41_sw_0;
 /* USER CODE END EV */
 
 /******************************************************************************/
@@ -291,5 +293,13 @@ void EXTI2_IRQHandler(void)
 void TIM1_CC_IRQHandler(void) {
   HAL_TIM_IRQHandler(&htim1);
 }
+
+void MDMA_IRQHandler(void)
+{
+  /* Check the interrupt and clear flag */
+  HAL_MDMA_IRQHandler(&hmdma_mdma_channel40_sw_0);
+  HAL_MDMA_IRQHandler(&hmdma_mdma_channel41_sw_0);
+}
+
 /* USER CODE END 1 */
 /************************ (C) COPYRIGHT STMicroelectronics *****END OF FILE****/

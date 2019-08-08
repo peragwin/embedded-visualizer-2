@@ -2,17 +2,51 @@
 #include "stm32h743xx.h"
 #include "main.h"
 
+extern MDMA_HandleTypeDef hmdma_mdma_channel40_sw_0;
+extern MDMA_HandleTypeDef hmdma_mdma_channel41_sw_0;
+
 uint32_t raw_audio_buffer[AUDIO_BUFFER_SIZE] __attribute__ ((section(".i2s_dma_buffer"))) __attribute__ ((aligned (32)));
+uint32_t audio_frame[AUDIO_BUFFER_SIZE / 4];
 
 volatile int audio_buffer_offset = 0;
+volatile int mdma0InProgress = 0;
+volatile int mdma1InProgress = 0;
+volatile int audio_frame_ready = 0; // TODO use hw semaphore with interrupt?
 static void audioM0Complete(DMA_HandleTypeDef *hdma);
 static void audioM1Complete(DMA_HandleTypeDef *hdma);
 static void audioError(DMA_HandleTypeDef *hdma);
+static void copyBufferMDMA(int offset);
+static void mdmaComplete(MDMA_HandleTypeDef *hmdma);
+static void mdmaError(MDMA_HandleTypeDef *hmdma);
 
 HAL_StatusTypeDef Audio_Init(SAI_HandleTypeDef *hsai) {
 
   uint32_t *buffer0 = raw_audio_buffer;
   uint32_t *buffer1 = raw_audio_buffer + AUDIO_BUFFER_SIZE / 2;
+
+  HAL_NVIC_SetPriority(MDMA_IRQn, 1, 0);
+  HAL_NVIC_EnableIRQ(MDMA_IRQn);
+
+  if (HAL_MDMA_RegisterCallback(&hmdma_mdma_channel40_sw_0, HAL_MDMA_XFER_CPLT_CB_ID,
+    mdmaComplete) != HAL_OK) {
+    
+    return HAL_ERROR;
+  }
+  if (HAL_MDMA_RegisterCallback(&hmdma_mdma_channel40_sw_0, HAL_MDMA_XFER_ERROR_CB_ID,
+    mdmaError) != HAL_OK) {
+    
+    return HAL_ERROR;
+  }
+  if (HAL_MDMA_RegisterCallback(&hmdma_mdma_channel41_sw_0, HAL_MDMA_XFER_CPLT_CB_ID,
+    mdmaComplete) != HAL_OK) {
+    
+    return HAL_ERROR;
+  }
+  if (HAL_MDMA_RegisterCallback(&hmdma_mdma_channel41_sw_0, HAL_MDMA_XFER_ERROR_CB_ID,
+    mdmaError) != HAL_OK) {
+    
+    return HAL_ERROR;
+  }
 
   if (hsai->State == HAL_SAI_STATE_READY)
   {
@@ -83,6 +117,68 @@ static void audioM1Complete(DMA_HandleTypeDef *hdma) {
 
     audio_buffer_offset += AUDIO_FRAME_SIZE;
     audio_buffer_offset %= AUDIO_BUFFER_SIZE;
+
+    copyBufferMDMA(audio_buffer_offset);
+}
+
+void copyBufferMDMA(int offset) {
+  int start = offset - (AUDIO_BUFFER_SIZE / 2);
+
+  int wrap = start < 0;
+  if (wrap) {
+    int len = -start/2;
+    start += AUDIO_BUFFER_SIZE;
+
+    mdma0InProgress = 1;
+    HAL_GPIO_WritePin(LD2_GPIO_Port, LD2_Pin, GPIO_PIN_SET);
+
+    HAL_StatusTypeDef err = HAL_MDMA_Start_IT(&hmdma_mdma_channel40_sw_0,
+      raw_audio_buffer+start+AUDIO_CHANNEL, audio_frame, len*4, 1);
+    if (err != HAL_OK) {
+      if (err != HAL_BUSY) {
+        Error_Handler();
+      } 
+    }
+
+    if (offset > 0) {
+      mdma1InProgress = 1;
+      err = HAL_MDMA_Start_IT(&hmdma_mdma_channel41_sw_0,
+        raw_audio_buffer+AUDIO_CHANNEL, audio_frame+len, (offset/2)*4, 1);
+      if (err != HAL_OK) {
+        if (err != HAL_BUSY) {
+          Error_Handler();
+        } 
+      }
+    }
+
+  } else {
+    HAL_GPIO_WritePin(LD2_GPIO_Port, LD2_Pin, GPIO_PIN_SET);
+
+    mdma0InProgress = 1;
+    HAL_StatusTypeDef err = HAL_MDMA_Start_IT(&hmdma_mdma_channel40_sw_0,
+      raw_audio_buffer+start+AUDIO_CHANNEL, audio_frame, (AUDIO_BUFFER_SIZE / 4) * 4, 1);
+    if (err != HAL_OK) {
+      if (err != HAL_BUSY) {
+        Error_Handler();
+      } 
+    }
+  }
+}
+
+static void mdmaComplete(MDMA_HandleTypeDef *hmdma) {
+  if (hmdma->Instance == hmdma_mdma_channel40_sw_0.Instance) {
+    mdma0InProgress = 0;
+    HAL_GPIO_WritePin(LD2_GPIO_Port, LD2_Pin, GPIO_PIN_RESET);
+  } else {
+    mdma1InProgress = 0;
+  }
+  if (!(mdma0InProgress || mdma1InProgress)) {
+    audio_frame_ready = 1;
+  }
+}
+
+static void mdmaError(MDMA_HandleTypeDef *hmdma) {
+  Error_Handler();
 }
 
 static HAL_StatusTypeDef SAI_Disable(SAI_HandleTypeDef *hsai)
