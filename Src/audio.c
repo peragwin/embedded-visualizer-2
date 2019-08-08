@@ -20,8 +20,8 @@ HAL_StatusTypeDef Audio_Init(SAI_HandleTypeDef *hsai) {
     __HAL_LOCK(hsai);
 
     // hsai->pBuffPtr = pData;
-    hsai->XferSize = AUDIO_BUFFER_SIZE;
-    hsai->XferCount = AUDIO_BUFFER_SIZE;
+    hsai->XferSize = AUDIO_FRAME_SIZE;
+    // hsai->XferCount = AUDIO_BUFFER_SIZE;
     hsai->ErrorCode = HAL_SAI_ERROR_NONE;
     hsai->State = HAL_SAI_STATE_BUSY_RX;
 
