@@ -63,6 +63,8 @@ uint8_t blu = 255;
 uint8_t display_buffer[APA107_BUFFER_SIZE(DISPLAY_WIDTH, DISPLAY_HEIGHT)] __attribute__ ((section(".spi_dma_buffer"))) __attribute__ ((aligned (32)));
 
 void txDisplayDMA(uint8_t *buffer, int size) {
+    // __HAL_SPI_CLEAR_EOTFLAG(&hspi1);
+    // __HAL_SPI_ENABLE_IT(&hspi1, SPI_IT_EOT);
     if (HAL_SPI_Transmit_DMA(&hspi1, (uint32_t)display_buffer, size) != HAL_OK) {
         Error_Handler();
     }
