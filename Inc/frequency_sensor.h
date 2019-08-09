@@ -1,7 +1,7 @@
 #ifndef __FREQUENCY_SENSOR_H
 #define __FREQUENCY_SENSOR_H
 
-#include <arm_math.h>
+#include "arm_math.h"
 #include "bucketer.h"
 
 typedef struct {
@@ -42,11 +42,17 @@ typedef struct {
     float *diff;
     float *energy;
     float bass;
+    float *scales;
+    int columnIdx;
+
+    int size;
+    int length;
 } FS_Drivers_t;
 
 typedef struct {
     int size;
     int columns;
+    int columnIdx;
     FS_Config_t *config;
 
     FS_GainController_t *gc;
@@ -55,6 +61,7 @@ typedef struct {
     Filter_t *gainFeedback;
     Filter_t *diffFilter;
     Filter_t *diffFeedback;
+    Filter_t *scaleFilter;
 
     FS_Drivers_t *drivers;
 
@@ -74,5 +81,6 @@ typedef struct {
 Audio_Processor_t* NewAudioProcessor(int size, int buckets, int columns, short* dacBuffer);
 void Audio_Process(Audio_Processor_t *a, int *input);
 void FS_Process(FS_Module_t *f, float *input);
+float* FS_GetColumn(FS_Module_t *f, int column);
 
 #endif

@@ -5,10 +5,10 @@
 #include "bucketer.h"
 #include "fast_log.h"
 
-Filter_t* NewFilter(int size, float *params) {
+Filter_t* NewFilter(int size, float *params, int nparams) {
     float *values = (float*)calloc(size, sizeof(float));
-    float *fparams = (float*)malloc(2*sizeof(float));
-    memcpy(fparams, params, 2*sizeof(float));
+    float *fparams = (float*)malloc(nparams*sizeof(float));
+    memcpy(fparams, params, nparams*sizeof(float));
 
     Filter_t *f = (Filter_t*)malloc(sizeof(Filter_t));
     f->params = params;
@@ -16,6 +16,12 @@ Filter_t* NewFilter(int size, float *params) {
     f->values = values;
     
     return f;
+}
+
+void apply_filter(Filter_t *f, float *frame) {
+    for (int i = 0; i < f->size; i++) {
+        f->values[i] = f->params[0] * frame[i] + f->params[1] * f->values[i];
+    }
 }
 
 FS_Drivers_t* NewDrivers(int size, int columns) {
@@ -27,12 +33,15 @@ FS_Drivers_t* NewDrivers(int size, int columns) {
 
     float *diff = (float*)calloc(size, sizeof(float));
     float *energy = (float*)calloc(size, sizeof(float));
+    float *scales = (float*)calloc(size, sizeof(float));
     
     FS_Drivers_t *d = (FS_Drivers_t*)malloc(sizeof(FS_Drivers_t));
     d->amp = amp;
     d->diff = diff;
     d->energy = energy;
     d->bass = 0;
+    d->size = size;
+    d->length = columns;
     
     return d;
 }
@@ -59,30 +68,36 @@ FS_Module_t* NewFrequencySensor(int size, int columns) {
     FS_Config_t *config = (FS_Config_t*)malloc(sizeof(FS_Config_t));
     config->offset = 0;
     config->gain = 2;
-    config->diffGain = 1e-3;
-    config->sync = 1e-2;
-    config->mode = 1;
+    config->diffGain = 1e-2;
+    config->sync = 1e-1;
+    config->mode = 2;
     config->preemph = 2;
 
     float gainParams[2] = {
         0.20, 0.80,
     };
-    Filter_t *gainFilter = NewFilter(size, gainParams);
+    Filter_t *gainFilter = NewFilter(size, gainParams, 2);
 
     float gainFeedbackP[2] = {
         -0.005, 0.995,
     };
-    Filter_t *gainFeedback = NewFilter(size, gainFeedbackP);
+    Filter_t *gainFeedback = NewFilter(size, gainFeedbackP, 2);
 
     float diffParams[2] = {
         0.263, .737,
     };
-    Filter_t *diffFilter = NewFilter(size, diffParams);
+    Filter_t *diffFilter = NewFilter(size, diffParams, 2);
 
     float diffFeedbackP[2] = {
         -0.0028, 0.2272,
     };
-    Filter_t *diffFeedback = NewFilter(size, diffFeedbackP);
+    Filter_t *diffFeedback = NewFilter(size, diffFeedbackP, 2);
+
+    float scaleParams[4] = {
+        0.05, 0,95,
+        0.001, 0.999,
+    }
+    Filter_t *scaleFilter = NewFilter(size, scaleParams, 4);
 
     float gainControllerParams[2] = {
         0.005, 0.995,
@@ -96,11 +111,13 @@ FS_Module_t* NewFrequencySensor(int size, int columns) {
     FS_Module_t *fs = (FS_Module_t*)malloc(sizeof(FS_Module_t));
     fs->size = size;
     fs->columns = columns;
+    fs->columnIdx = 0;
     fs->config = config;
     fs->gainFilter = gainFilter;
     fs->gainFeedback = gainFeedback;
     fs->diffFilter = diffFilter;
     fs->diffFeedback = diffFeedback;
+    fs->scaleFilter = scaleFilter;
     fs->gc = gc;
     fs->drivers = drivers;
     fs->renderLock = 0;
@@ -118,7 +135,6 @@ static void init_blackman_window(float *window, int size) {
     window[i] /= 32768; // 2**15 to get a range of [-1, 1]
   }
 }
-
 
 Audio_Processor_t* NewAudioProcessor(int size, int buckets, int columns, short *dacBuffer) {
     Audio_Processor_t *ap = (Audio_Processor_t*)malloc(sizeof(Audio_Processor_t));
@@ -219,6 +235,183 @@ void Audio_Process(Audio_Processor_t *a, int *input) {
     FS_Process(a->fs, bucketFrame);
 }
 
-void FS_Process(FS_Module_t *f, float *input) {
-    return;
+void apply_preemphasis(FS_Module_t *f, float *frame) {
+    float incr = (f->config->preemph - 1) / (float)f->size;
+    for (int i = 0; i < f->size; i++) {
+        frame[i] *= 1 + (float)i*incr;
+    }
+}
+
+static float log_error(float x) {
+    x = 1.000001 - x;
+    float sign = (x < 0) ? 1.0 : -1.0;
+    float a = (x < 0) ? -x : x;
+    return sign * log2_2521(a);
+}
+
+void apply_gain_control(FS_GainController_t *g, float *frame) {
+    // apply gain
+    arm_mult_f32(frame, g->gain, frame, g->size);
+
+    // apply filter
+    apply_filter(g->filter, frame);
+
+    // calculate error
+    float e[g->size];
+    for (int i = 0; i < g->size; i++) {
+        e[i] = log_error(1 - g->filter->values[i]);
+    }
+    
+    // apply pd controller
+    float u;
+    float kp = g->kp;
+    float kd = g->kd;
+    for (int i = 0; i < g->size; i++) {
+        float gain = g->gain[i];
+        float err = g->err[i];
+        u = kp * e[i] + kd * (e[i] - err);
+        gain += u;
+        if (gain > 1e8) gain = 1e8;
+        if (gain < 1e-8) gain = 1e-8;
+        g->gain[i] = gain;
+        g->err[i] = e[i];
+    }
+}
+
+void apply_filters(FS_Module_t *f, float *frame) {
+    float diff_input[f->size];
+    memcpy(diff_input, f->gainFilter->values, f->size * sizeof(float));
+
+    apply_filter(f->gainFilter, frame);
+    apply_filter(f->gainFeedback, frame);
+    arm_add_f32(f->gainFilter->values, f->gainFeedback->values, f->gainFilter->values, f->size);
+
+    // calculate differential of this update
+    arm_sub_f32(f->gainFilter->values, diff_input, diff_input, f->size);
+
+    apply_filter(f->diffFilter, diff_input);
+    apply_filter(f->diffFeedback, diff_input);
+    arm_add_f32(f->diffFilter->values, f->diffFeedback->values, f->diffFilter->values, f->size);
+}
+
+void apply_effects(FS_Module_t *f) {
+    float dg = f->config->diffGain;
+    float ag = f->config->gain;
+    float ao = f->config->offset;
+    float *gain = f->gainFilter->values;
+    float *diff = f->diffFilter->values;
+
+    // apply column animation
+    if (f->config->mode == 1 || f->config->mode == 2) {
+        f->columnIdx++;
+        f->columnIdx %= f->columns;
+        if (f->config->mode == 1) { // columns decay
+            // TODO: decimate updates to fit into output size
+            float decay = 1.0 - (2.0 / (float)f->columns);
+            for (int i = 0; i < f->columns; i++) {
+                for (int j = 0; j < f->size; j++) {
+                    f->drivers->amp[i+1][j] *= decay;
+                }
+            }
+        }
+    }
+
+    f->drivers->columnIdx = f->columnIdx;
+    float *amp = f->drivers->amp[f->columnIdx];
+    float *fs_diff = f->drivers->diff;
+    float *energy = f->drivers->energy;
+    float ph;
+    memcpy(amp, gain, f->size * sizeof(float));
+    // memcpy(fs_diff, diff, f->size * sizeof(float)); // maybe dont need to copy this
+    fs_diff = diff;
+    for (int i = 0; i < f->size; i++) {
+        amp[i] = ao + ag * amp[i];
+        ph = energy[i] + .001;
+        ph -= dg * (diff[i] < 0 ? -diff[i] : diff[i]);
+        energy[i] = ph;
+    }
+}
+
+
+void apply_sync(FS_Module_t *f) {
+    float *energy = f->drivers->energy;
+    float mean = 0;
+    for (int i = 0; i < f->size; i++) {
+        mean += energy[i];
+    }
+    mean /= (float)f->size;
+    if (mean < -2*PI) {
+        for (int i = 0; i < f->size; i++) {
+            energy[i] = 2*PI + fmod(energy[i], 2*PI);
+        }
+        mean = 2*PI + fmod(mean, 2*PI);
+    }
+    if (mean > 2*PI) {
+        for (int i = 0; i < f->size; i++) {
+            energy[i] = fmod(energy[i], 2*PI);
+        }
+        mean = fmod(mean, 2*PI);
+    }
+
+    float diff;
+    float sign;
+    for (int i = 0; i < f->size; i++) {
+        if (i != 0) {
+            diff = energy[i-1] - energy[i];
+            sign = (diff < 0) ? -1.0 : 1.0;
+            diff = sign * diff * diff;
+            energy[i] += f->config->sync * diff;
+        }
+        if (i != f->size-1) {
+            diff = energy[i+1] - energy[i];
+            sign = (diff < 0) ? -1.0 : 1.0;
+            diff = sign * diff * diff;
+            energy[i] += f->config->sync * diff;
+        }
+        diff = mean - energy[i];
+        sign = (diff < 0) ? -1.0 : 1.0;
+        diff = sign * diff * diff;
+        energy[i] += f->config->sync * diff;
+    }
+}
+
+void apply_scaling(FS_Module_t *f, float *frame) {
+    for (int i = 0; i < f->size; i++) {
+        float vsh = f->scaleFilter->values[i];
+        float vs = f->drivers->scales[i];
+
+        float sval = vs * (frame[i] - 1);
+        if (sval < 0) sval = -sval;
+        
+        float *params = f->scaleFilter->params;
+        if (sval < vsh) {
+            vsh = params[0] * sval + params[1] * vsh;
+        } else {
+            vsh = params[2] * sval + params[3] * vsh;
+        }
+
+        if (vsh < .001) vsh = .001;
+        vs = 1. / vsh;
+
+        f->scaleFilter->values[i] = vsh;
+        f->drivers->scales[i] = vs;
+    }
+}
+
+void FS_Process(FS_Module_t *f, float *frame) {
+    f->renderLock = 1;
+    apply_preemphasis(f, frame);
+    apply_gain_control(f, frame);
+    apply_filters(f, frame);
+    apply_effects(f);
+    apply_sync(f);
+    apply_scaling(f, f->drivers->amp[f->columnIdx]);
+    f->renderLock = 0;
+}
+
+float* FS_GetColumn(FS_Drivers_t *d, int column) {
+    column %= d->length;
+    column = d->columnIdx - column;
+    if (column < 0) column += d->length;
+    return d->amp[column];
 }

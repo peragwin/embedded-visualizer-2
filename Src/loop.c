@@ -6,6 +6,7 @@
 #include "apa107.h"
 #include "audio.h"
 #include "frequency_sensor.h"
+#include "render.h"
 
 extern volatile int audio_frame_ready;
 extern TIM_HandleTypeDef htim1;
@@ -80,6 +81,11 @@ void txDisplayDMA(uint8_t *buffer, int size) {
 APA107 *display = NULL;
 Audio_Processor_t *audio;
 uint32_t audio_buffer[AUDIO_FFT_SIZE];
+RenderMode2_t *render;
+
+static void drawPixel(int x, Color_AGBR c) {
+    APA107_SetPixel(display, x, 0, c);
+}
 
 void main_loop(void) {
     init_sin_table();
@@ -101,6 +107,24 @@ void main_loop(void) {
 
     audio = NewAudioProcessor(AUDIO_FFT_SIZE, 18, 4, dacBuffer);
     display = APA107_Init(DISPLAY_WIDTH, DISPLAY_HEIGHT, display_buffer, txDisplayDMA);
+    Render2Params_t renderParams = {
+        .pHeight = 1,
+        .pHScale = .1,
+        .pHOffset = 0,
+        .pWidth = 12,
+        .pWScale = .1,
+        .pWOffset = 0,
+    };
+    ColorParams_t colorParams = {
+        .valueScale = 1,
+        .valueOffset = -1,
+        .saturationScale = 1,
+        .saturationOffset = -1,
+        .alphaScale = 1,
+        .alphaOffset = -1,
+        .maxAlpha = 0.25,
+    };
+    render = NewRender2(&renderParams, &colorParams, 144, drawPixel);
 
     if (HAL_TIM_Base_Start(&htim6) != HAL_OK) {
         Error_Handler();

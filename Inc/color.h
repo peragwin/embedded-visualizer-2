@@ -20,6 +20,13 @@ typedef struct {
     char r;
 } Color_ABGR;
 
+typedef struct {
+    float a;
+    float b;
+    float g;
+    float r;
+} Color_ABGRf;
+
 Color_RGB Color_FromHSV(Color_HSV in);
 
 #endif
