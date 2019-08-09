@@ -2,6 +2,9 @@
 #ifndef bucketer_h
 #define bucketer_h
 
+#include "stm32h743xx.h"
+#include <arm_math.h>
+
 typedef struct {
     int size;
     int buckets;

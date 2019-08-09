@@ -6,7 +6,7 @@ extern MDMA_HandleTypeDef hmdma_mdma_channel40_sw_0;
 extern MDMA_HandleTypeDef hmdma_mdma_channel41_sw_0;
 
 uint32_t raw_audio_buffer[AUDIO_BUFFER_SIZE] __attribute__ ((section(".i2s_dma_buffer"))) __attribute__ ((aligned (32)));
-uint32_t audio_frame[AUDIO_BUFFER_SIZE / 4];
+uint32_t *audio_frame;
 
 volatile int audio_buffer_offset = 0;
 volatile int mdma0InProgress = 0;
@@ -19,10 +19,11 @@ static void copyBufferMDMA(int offset);
 static void mdmaComplete(MDMA_HandleTypeDef *hmdma);
 static void mdmaError(MDMA_HandleTypeDef *hmdma);
 
-HAL_StatusTypeDef Audio_Init(SAI_HandleTypeDef *hsai) {
+HAL_StatusTypeDef Audio_Init(SAI_HandleTypeDef *hsai, uint32_t *audio_buffer) {
 
   uint32_t *buffer0 = raw_audio_buffer;
   uint32_t *buffer1 = raw_audio_buffer + AUDIO_BUFFER_SIZE / 2;
+  audio_frame = audio_buffer;
 
   HAL_NVIC_SetPriority(MDMA_IRQn, 1, 0);
   HAL_NVIC_EnableIRQ(MDMA_IRQn);

@@ -4,9 +4,13 @@
 #include "main.h"
 #include "rotary.h"
 #include "apa107.h"
+#include "audio.h"
+#include "frequency_sensor.h"
 
+extern volatile int audio_frame_ready;
 extern TIM_HandleTypeDef htim1;
 extern SPI_HandleTypeDef hspi1;
+extern SAI_HandleTypeDef hsai_BlockA1;
 
 float sin_table[256];
 
@@ -71,6 +75,8 @@ void txDisplayDMA(uint8_t *buffer, int size) {
 }
 
 APA107 *display = NULL;
+Audio_Processor_t *audio;
+uint32_t audio_buffer[AUDIO_FFT_SIZE];
 
 void main_loop(void) {
     init_sin_table();
@@ -86,6 +92,11 @@ void main_loop(void) {
 	// 	"Bare metal",
 	// 	30, 80, color);
 
+    if (Audio_Init(&hsai_BlockA1, audio_buffer) != HAL_OK) {
+        Error_Handler();
+    }
+
+    audio = NewAudioProcessor(AUDIO_FFT_SIZE, 18, 4);
     display = APA107_Init(DISPLAY_WIDTH, DISPLAY_HEIGHT, display_buffer, txDisplayDMA);
 
     uint16_t ph = 0;
@@ -104,7 +115,6 @@ void main_loop(void) {
     //         color = Color16(i, i, i);
     //         ILI9486_DrawPixels(30 + i, 120, 1, 1, &color);
     //     }
-        
 
     while (1) {
         //HAL_GPIO_TogglePin(LD1_GPIO_Port, LD1_Pin);
@@ -138,7 +148,10 @@ void main_loop(void) {
         // }
         // SSD1331_DrawPixels(0, 0, 96, 64, (uint8_t*)buffer);
 
-        
+        if (audio_frame_ready) {
+            audio_frame_ready = 0;
+            Audio_Process(audio, audio_buffer);
+        }
     }
 }
 

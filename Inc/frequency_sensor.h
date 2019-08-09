@@ -1,7 +1,7 @@
 #ifndef __FREQUENCY_SENSOR_H
 #define __FREQUENCY_SENSOR_H
 
-#include "arm_math.h"
+#include <arm_math.h>
 #include "bucketer.h"
 
 typedef struct {
@@ -69,6 +69,7 @@ typedef struct {
     FS_Module_t *fs;
 } Audio_Processor_t;
 
+Audio_Processor_t* NewAudioProcessor(int size, int buckets, int columns);
 void Audio_Process(Audio_Processor_t *a, int *input);
 void FS_Process(FS_Module_t *f, float *input);
 

@@ -1,5 +1,7 @@
+#include "stm32h743xx.h"
 #include "frequency_sensor.h"
-#include "arm_math.h"
+#include <arm_math.h>
+#include <stdlib.h>
 #include "bucketer.h"
 
 Filter_t* NewFilter(int size, float *params) {
@@ -168,7 +170,7 @@ void apply_window(float *input, float *window, int size) {
 // fast_log just returns the floating point's exponent!
 float fast_log(float x) {
     unsigned int v = *((int*)&x);
-    return (float)((v >> 23) - 127);
+    return (float)(((v >> 23) & 0xFF) - 127);
 }
 
 void power_spectrum(arm_rfft_fast_instance_f32 *fft, float *input, float *output) {
