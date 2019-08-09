@@ -3,6 +3,7 @@
 #include <arm_math.h>
 #include <stdlib.h>
 #include "bucketer.h"
+#include "fast_log.h"
 
 Filter_t* NewFilter(int size, float *params) {
     float *values = (float*)calloc(size, sizeof(float));
@@ -119,7 +120,7 @@ static void init_blackman_window(float *window, int size) {
 }
 
 
-Audio_Processor_t* NewAudioProcessor(int size, int buckets, int columns) {
+Audio_Processor_t* NewAudioProcessor(int size, int buckets, int columns, short *dacBuffer) {
     Audio_Processor_t *ap = (Audio_Processor_t*)malloc(sizeof(Audio_Processor_t));
     ap->size = size;
 
@@ -127,13 +128,16 @@ Audio_Processor_t* NewAudioProcessor(int size, int buckets, int columns) {
     init_blackman_window(window, size);
     ap->window = window;
     
-    ap->bucketer = NewBucketer(size, buckets, 64, 16000);
+    int bucketSize = (size - (4 * size / 24)) / 2;
+    ap->bucketer = NewBucketer(bucketSize, buckets, 32, 12000);
 
     arm_rfft_fast_instance_f32 *fft = (arm_rfft_fast_instance_f32*)malloc(sizeof(arm_rfft_fast_instance_f32));
     arm_rfft_fast_init_f32(fft, size);
     ap->fft = fft;
 
     ap->fs = NewFrequencySensor(buckets, columns);
+
+    ap->dacOutput= dacBuffer;
 
     return ap;
 }
@@ -153,7 +157,7 @@ void remove_dc_component(int *input, int *output, int size) {
     }
     sum /= size;
     for (int i = 0; i < size; i++) {
-        output[i] = input[i] - size;
+        output[i] = input[i] - sum;
     }
 }
 
@@ -168,21 +172,35 @@ void apply_window(float *input, float *window, int size) {
 }
 
 // fast_log just returns the floating point's exponent!
-float fast_log(float x) {
-    unsigned int v = *((int*)&x);
-    return (float)(((v >> 23) & 0xFF) - 127);
-}
+// float fast_log(float x) {
+//     unsigned int v = *((int*)&x);
+//     return (float)(((v >> 23) & 0xFF) - 127);
+// }
 
 void power_spectrum(arm_rfft_fast_instance_f32 *fft, float *input, float *output) {
     int size = fft->fftLenRFFT;
     arm_rfft_fast_f32(fft, input, output, 0);
-    // arm_abs_f32(output, output, size);
+    arm_abs_f32(output, output, size);
     for (int i = 0; i < size; i++) {
-        output[i] = fast_log(output[i]);
+        output[i] = log2_2521(1 + output[i]);
     }
 }
 
+void write_dac_output(float *input, short *output, int size) {
+    float max = 0;
+    for (int i = 1; i < size; i++) {
+        if (input[i] > max) max = input[i];
+    }
+    for (int i = 1; i < size; i++) {
+        output[i] = 0x0FFF * (input[i] / max);
+    }
+    output[0] = 0;
+    SCB_CleanDCache_by_Addr(output, size*2);
+}
+
 void Audio_Process(Audio_Processor_t *a, int *input) {
+    SCB_InvalidateDCache_by_Addr(input, a->size*4);
+
     convert_to_signed(input, input, a->size);
     remove_dc_component(input, input, a->size);
     
@@ -194,6 +212,7 @@ void Audio_Process(Audio_Processor_t *a, int *input) {
     apply_window(frame, a->window, a->size);
 
     power_spectrum(a->fft, frame, fftFrame);
+    write_dac_output(fftFrame, a->dacOutput, a->size);
 
     Bucket(a->bucketer, fftFrame, bucketFrame);
 

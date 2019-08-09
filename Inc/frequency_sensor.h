@@ -67,9 +67,11 @@ typedef struct {
     float *window;
     Bucketer_t *bucketer;
     FS_Module_t *fs;
+
+    short *dacOutput;
 } Audio_Processor_t;
 
-Audio_Processor_t* NewAudioProcessor(int size, int buckets, int columns);
+Audio_Processor_t* NewAudioProcessor(int size, int buckets, int columns, short* dacBuffer);
 void Audio_Process(Audio_Processor_t *a, int *input);
 void FS_Process(FS_Module_t *f, float *input);
 

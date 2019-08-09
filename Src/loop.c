@@ -11,6 +11,8 @@ extern volatile int audio_frame_ready;
 extern TIM_HandleTypeDef htim1;
 extern SPI_HandleTypeDef hspi1;
 extern SAI_HandleTypeDef hsai_BlockA1;
+extern TIM_HandleTypeDef htim6;
+extern DAC_HandleTypeDef hdac1;
 
 float sin_table[256];
 
@@ -65,6 +67,7 @@ uint8_t gre = 255;
 uint8_t blu = 255;
 
 uint8_t display_buffer[APA107_BUFFER_SIZE(DISPLAY_WIDTH, DISPLAY_HEIGHT)] __attribute__ ((section(".spi_dma_buffer"))) __attribute__ ((aligned (32)));
+uint16_t dacBuffer[AUDIO_FFT_SIZE] __attribute__ ((section(".dac_dma_buffer"))) __attribute__ ((aligned (32)));
 
 void txDisplayDMA(uint8_t *buffer, int size) {
     // __HAL_SPI_CLEAR_EOTFLAG(&hspi1);
@@ -96,8 +99,15 @@ void main_loop(void) {
         Error_Handler();
     }
 
-    audio = NewAudioProcessor(AUDIO_FFT_SIZE, 18, 4);
+    audio = NewAudioProcessor(AUDIO_FFT_SIZE, 18, 4, dacBuffer);
     display = APA107_Init(DISPLAY_WIDTH, DISPLAY_HEIGHT, display_buffer, txDisplayDMA);
+
+    if (HAL_TIM_Base_Start(&htim6) != HAL_OK) {
+        Error_Handler();
+    }
+    if (HAL_DAC_Start_DMA(&hdac1, DAC_CHANNEL_1, audio->dacOutput, audio->size, DAC_ALIGN_12B_R) != HAL_OK) {
+        Error_Handler();
+    }
 
     uint16_t ph = 0;
     // uint16_t buffer[96*64];

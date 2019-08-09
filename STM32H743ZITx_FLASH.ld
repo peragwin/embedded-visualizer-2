@@ -57,6 +57,8 @@ _estack = 0x20020000;    /* end of RAM */
 /* Generate a link error if heap and stack don't fit into RAM */
 _Min_Heap_Size = 0x200;      /* required amount of heap  */
 _Min_Stack_Size = 0x400; /* required amount of stack */
+_Max_Audio_Size = 0x4000; /* 16KB or 4096 samples */
+_Max_Display_Size = 0x5000; /* ~20KB or hopefully enough for a 64x64 grid */
 
 /* Specify the memory areas */
 MEMORY
@@ -187,15 +189,26 @@ SECTIONS
 
   } >RAM_D1
 
-  /* Define a location on D2 for the SPI DMA buffer */
+  /* Define a location on D1 for the SPI DMA buffer */
   .spi_dma_buffer :
   {
    . = ALIGN(4);
+   . = . + _Max_Audio_Size;
+
+   *(.spi_dma_buffer)
     
-   *(.dma_buffer)
-    
-  } >RAM_D2
+  } >RAM_D1
   
+  /* Define a location on D1 for the DAC DMA buffer */
+  .dac_dma_buffer :
+  {
+   . = ALIGN(4);
+   . = . + _Max_Audio_Size;
+   . = . + _Max_Display_Size;
+
+   *(.dac_dma_buffer)
+    
+  } >RAM_D1
 
   /* Remove information from the standard libraries */
   /DISCARD/ :
