@@ -10,7 +10,10 @@ class Filter:
     def apply(self, xinput):
         out = np.zeros(len(xinput))
         for i, x in enumerate(xinput):
-            self.y = self.params[0] * x + self.params[1] * self.y
+            if (len(self.params) == 2 or (len(self.params) == 4 and np.abs(x) > np.abs(self.y))):
+                self.y = self.params[0] * x + self.params[1] * self.y
+            else:
+                self.y = self.params[2] * x + self.params[3] * self.y
             out[i] = self.y
         return out
 
@@ -171,7 +174,7 @@ def test4():
 
     xin = np.zeros(size)
     for i in range(size):
-        if (i % 256) < 16:
+        if (i % 256) < 128:
             # print (i, i/256 )
             if (int(i / 256) % 4 == 1):
                 xin[i] = 1
@@ -186,14 +189,14 @@ def test4():
     # plt.plot(gainOut)
     # plt.show()
 
-    f1 = Filter([.05, .95], size)
-    f2 = Filter([-.0075, .9925], size)
+    f1 = Filter([.1, .9], size)
+    f2 = Filter([-.0005, .9995, -.0075, .9925], size)
     xout1 = f1.apply(xout)
     xout2 = f2.apply(xout)
 
     combine = xout1 + xout2
 
-    sc = Scaler([.05, .95, .001, .999])
+    sc = Scaler([.001, .999, .0005, .9995])
     scales, vsh = sc.apply(combine)
 
     # plt.plot(xin)
@@ -201,9 +204,10 @@ def test4():
     p0, = plt.plot(xout, label="x*gain")
     p1, = plt.plot(combine, label="combine")
     p2, = plt.plot(scales / 10, label="scales / 10")
+    p5, = plt.plot(vsh, label="scale value filt")
     p3, = plt.plot(combine * scales, label="combine*scales")
 
-    plt.legend(handles=[p0, p1,p2,p3, pg])
+    plt.legend(handles=[p0, p1,p2,p3, pg, p5])
     plt.show()
 
 if __name__ == "__main__":

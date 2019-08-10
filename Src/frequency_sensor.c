@@ -70,8 +70,8 @@ FS_Module_t* NewFrequencySensor(int size, int columns) {
     FS_Config_t *config = (FS_Config_t*)malloc(sizeof(FS_Config_t));
     config->offset = 0;
     config->gain = 2;
-    config->diffGain = 0.2;
-    config->sync = 8e-3;
+    config->diffGain = 0.05;
+    config->sync = 1e-3;
     config->mode = 2;
     config->preemph = 2;
     config->columnDivider = 1;
@@ -82,7 +82,7 @@ FS_Module_t* NewFrequencySensor(int size, int columns) {
     Filter_t *gainFilter = NewFilter(size, gainParams, 2);
 
     float gainFeedbackP[2] = {
-        -0.005, 0.995,
+        -0.0005, 0.9995,
     };
     Filter_t *gainFeedback = NewFilter(size, gainFeedbackP, 2);
 
@@ -97,8 +97,8 @@ FS_Module_t* NewFrequencySensor(int size, int columns) {
     Filter_t *diffFeedback = NewFilter(size, diffFeedbackP, 2);
 
     float scaleParams[4] = {
-        0.05, 0.95,
         0.001, 0.999,
+        0.0005, 0.9995,
     };
     Filter_t *scaleFilter = NewFilter(size, scaleParams, 4);
     for (int i = 0; i < size; i++) {
@@ -208,17 +208,46 @@ void power_spectrum(arm_rfft_fast_instance_f32 *fft, float *input, float *output
     }
 }
 
-void write_dac_output(float *input, short *output, int size) {
+static float dac_scale = 0;
+
+void write_audio_dac_output(float *input, short *output, int size) {
     float max = 0;
     for (int i = 1; i < size; i++) {
         if (input[i] > max) max = input[i];
     }
+    
+    max = 1./max;
+    if (max < dac_scale) dac_scale = max;
+    else dac_scale = .001 * max + .999 * dac_scale; 
+    
     for (int i = 1; i < size; i++) {
-        output[i] = 0x0FFF * (input[i] / max);
+        output[i] = 0xfff * (input[i] * dac_scale / 2 + 0.5);
+        if (output[i] > 0x0fff) output[i] = 0x0fff;
+        if (output[i] < 0) output[i] = 0;
     }
-    output[0] = 0;
+    output[0] = 1;
     SCB_CleanDCache_by_Addr(output, size*2);
 }
+
+void write_fft_dac_output(float *input, short *output, int size) {
+    float max = 0;
+    for (int i = 1; i < size; i++) {
+        if (input[i] > max) max = input[i];
+    }
+    
+    max = 1./max;
+    if (max < dac_scale) dac_scale = max;
+    else dac_scale = .001 * max + .999 * dac_scale; 
+    
+    for (int i = 1; i < size; i++) {
+        output[i] = 0xfff * (input[i] * dac_scale);
+        if (output[i] > 0x0fff) output[i] = 0x0fff;
+        if (output[i] < 0) output[i] = 0;
+    }
+    output[0] = 1;
+    SCB_CleanDCache_by_Addr(output, size*2);
+}
+
 
 void Audio_Process(Audio_Processor_t *a, int *input) {
     SCB_InvalidateDCache_by_Addr(input, a->size*4);
@@ -231,10 +260,12 @@ void Audio_Process(Audio_Processor_t *a, int *input) {
     float bucketFrame[a->bucketer->buckets];
 
     convert_to_float(input, frame, a->size);
+    //write_audio_dac_output(frame, a->dacOutput, a->size);
+
     apply_window(frame, a->window, a->size);
 
     power_spectrum(a->fft, frame, fftFrame);
-    write_dac_output(fftFrame, a->dacOutput, a->size);
+    write_fft_dac_output(fftFrame, a->dacOutput, a->size);
 
     Bucket(a->bucketer, fftFrame, bucketFrame);
 
@@ -339,23 +370,12 @@ void apply_effects(FS_Module_t *f) {
 
 void apply_sync(FS_Module_t *f) {
     float *energy = f->drivers->energy;
+    
     float mean = 0;
     for (int i = 0; i < f->size; i++) {
         mean += energy[i];
     }
     mean /= (float)f->size;
-    if (mean < -2*PI) {
-        for (int i = 0; i < f->size; i++) {
-            energy[i] = 2*PI + fmod(energy[i], 2*PI);
-        }
-        mean = 2*PI + fmod(mean, 2*PI);
-    }
-    if (mean > 2*PI) {
-        for (int i = 0; i < f->size; i++) {
-            energy[i] = fmod(energy[i], 2*PI);
-        }
-        mean = fmod(mean, 2*PI);
-    }
 
     float diff;
     float sign;
@@ -376,6 +396,32 @@ void apply_sync(FS_Module_t *f) {
         sign = (diff < 0) ? -1.0 : 1.0;
         diff = sign * diff * diff;
         energy[i] += f->config->sync * diff;
+    }
+
+    mean = 0;
+    for (int i = 0; i < f->size; i++) {
+        mean += energy[i];
+    }
+    mean /= (float)f->size;
+
+    if (mean < -2*PI) {
+        // wait until all elements go past the mark so theres no sign flips
+        for (int i = 0; i < f->size; i++) {
+            if (energy[i] >= -2*PI) return;
+        }
+        for (int i = 0; i < f->size; i++) {
+            energy[i] = 2*PI + fmod(energy[i], 2*PI);
+        }
+        mean = 2*PI + fmod(mean, 2*PI);
+    }
+    if (mean > 2*PI) {
+        for (int i = 0; i < f->size; i++) {
+            if (energy[i] <= 2*PI) return;
+        }
+        for (int i = 0; i < f->size; i++) {
+            energy[i] = fmod(energy[i], 2*PI);
+        }
+        mean = fmod(mean, 2*PI);
     }
 }
 

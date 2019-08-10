@@ -29,13 +29,14 @@ typedef struct {
 // RenderMode2 displays a single row of LEDs
 typedef struct {
     int size;
+    int length;
     ColorParams_t *colorParams;
     Render2Params_t *params;
-    void (*_setPixel) (int x, Color_ABGR c);
+    void (*_setPixel) (int x, int y, Color_ABGR c);
 } RenderMode2_t;
 
-RenderMode2_t* NewRender2(Render2Params_t *params, ColorParams_t *colorParams, int size,
-    void (*setPixel) (int x, Color_ABGR c));
+RenderMode2_t* NewRender2(Render2Params_t *params, ColorParams_t *colorParams, int size, int length,
+    void (*setPixel) (int x, int y, Color_ABGR c));
 void Render2(RenderMode2_t *r, FS_Drivers_t *drivers);
 
 #endif

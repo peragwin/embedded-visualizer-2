@@ -74,9 +74,7 @@ uint16_t dacBuffer[AUDIO_FFT_SIZE] __attribute__ ((section(".dac_dma_buffer"))) 
 void txDisplayDMA(uint8_t *buffer, int size) {
     // __HAL_SPI_CLEAR_EOTFLAG(&hspi1);
     // __HAL_SPI_ENABLE_IT(&hspi1, SPI_IT_EOT);
-    if (HAL_SPI_Transmit_DMA(&hspi1, (uint32_t)display_buffer, size) != HAL_OK) {
-        Error_Handler();
-    }
+    HandleError(HAL_SPI_Transmit_DMA(&hspi1, (uint32_t)display_buffer, size), 1);
 }
 
 APA107 *display = NULL;
@@ -84,12 +82,12 @@ Audio_Processor_t *audio;
 uint32_t audio_buffer[AUDIO_FFT_SIZE];
 RenderMode2_t *render;
 
-static void drawPixel(int x, Color_ABGR c) {
-    int y = 0;
-    if (x >= DISPLAY_WIDTH) {
-        x -= DISPLAY_WIDTH;
-        y = 1;
-    }
+static void drawPixel(int x, int y, Color_ABGR c) {
+    // int y = 0;
+    // if (x >= DISPLAY_WIDTH) {
+    //     x -= DISPLAY_WIDTH;
+    //     y = 1;
+    // }
     APA107_SetPixel(display, x, y, c);
 }
 
@@ -111,7 +109,7 @@ void main_loop(void) {
         Error_Handler();
     }
 
-    audio = NewAudioProcessor(AUDIO_FFT_SIZE, 18, 4, dacBuffer);
+    audio = NewAudioProcessor(AUDIO_FFT_SIZE, 36, 4, dacBuffer);
     display = APA107_Init(DISPLAY_WIDTH, DISPLAY_HEIGHT, display_buffer, txDisplayDMA);
     Render2Params_t renderParams = {
         .pHeight = 1,
@@ -121,13 +119,13 @@ void main_loop(void) {
         .pWidth = 12,
         .pWScale = .1,
         .pWOffset = 0,
-        .pVWOffset = 0,
+        .pVWOffset = -1,
     };
     ColorParams_t colorParams = {
         .valueScale = 1,
-        .valueOffset = 2,
-        .saturationScale = 4,
-        .saturationOffset = 4,
+        .valueOffset = 0,
+        .saturationScale = .75,
+        .saturationOffset = 0,
         .alphaScale = 2,
         .alphaOffset = 2,
         .maxAlpha = 0.5,
@@ -137,7 +135,7 @@ void main_loop(void) {
             .blue = 1,
         },
     };
-    render = NewRender2(&renderParams, &colorParams, DISPLAY_WIDTH*DISPLAY_HEIGHT, drawPixel);
+    render = NewRender2(&renderParams, &colorParams, DISPLAY_WIDTH*DISPLAY_HEIGHT, DISPLAY_HEIGHT, drawPixel);
 
     if (HAL_TIM_Base_Start(&htim6) != HAL_OK) {
         Error_Handler();

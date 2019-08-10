@@ -57,9 +57,9 @@ Color_RGB Color_FromHSV(ColorGamut_t *g, Color_HSV in)
         break;
     }
 
-    // out.r = powf(out.r, g->red);
-    // out.g = powf(out.g, g->green);
-    // out.b = powf(out.b, g->blue);
+    out.r = powf(out.r, g->red);
+    out.g = powf(out.g, g->green);
+    out.b = powf(out.b, g->blue);
 
     return out;     
 }

@@ -79,7 +79,8 @@ Src/audio.c \
 Src/frequency_sensor.c \
 Src/bucketer.c \
 Src/fast_log.c \
-Src/render.c
+Src/render.c \
+Src/hsluv.c
 
 # ASM sources
 ASM_SOURCES =  \
