@@ -78,7 +78,8 @@ Src/apa107.c \
 Src/audio.c \
 Src/frequency_sensor.c \
 Src/bucketer.c \
-Src/fast_log.c
+Src/fast_log.c \
+Src/render.c
 
 # ASM sources
 ASM_SOURCES =  \

@@ -108,6 +108,8 @@ static void audioM0Complete(DMA_HandleTypeDef *hdma) {
 
     audio_buffer_offset += AUDIO_FRAME_SIZE;
     audio_buffer_offset %= AUDIO_BUFFER_SIZE;
+
+    copyBufferMDMA(audio_buffer_offset);
 }
 
 static void audioM1Complete(DMA_HandleTypeDef *hdma) {
@@ -131,7 +133,7 @@ void copyBufferMDMA(int offset) {
     start += AUDIO_BUFFER_SIZE;
 
     mdma0InProgress = 1;
-    HAL_GPIO_WritePin(LD2_GPIO_Port, LD2_Pin, GPIO_PIN_SET);
+    //HAL_GPIO_WritePin(LD2_GPIO_Port, LD2_Pin, GPIO_PIN_SET);
 
     HAL_StatusTypeDef err = HAL_MDMA_Start_IT(&hmdma_mdma_channel40_sw_0,
       raw_audio_buffer+start+AUDIO_CHANNEL, audio_frame, len*4, 1);
@@ -153,7 +155,7 @@ void copyBufferMDMA(int offset) {
     }
 
   } else {
-    HAL_GPIO_WritePin(LD2_GPIO_Port, LD2_Pin, GPIO_PIN_SET);
+    //HAL_GPIO_WritePin(LD2_GPIO_Port, LD2_Pin, GPIO_PIN_SET);
 
     mdma0InProgress = 1;
     HAL_StatusTypeDef err = HAL_MDMA_Start_IT(&hmdma_mdma_channel40_sw_0,
@@ -169,7 +171,7 @@ void copyBufferMDMA(int offset) {
 static void mdmaComplete(MDMA_HandleTypeDef *hmdma) {
   if (hmdma->Instance == hmdma_mdma_channel40_sw_0.Instance) {
     mdma0InProgress = 0;
-    HAL_GPIO_WritePin(LD2_GPIO_Port, LD2_Pin, GPIO_PIN_RESET);
+    //HAL_GPIO_WritePin(LD2_GPIO_Port, LD2_Pin, GPIO_PIN_RESET);
   } else {
     mdma1InProgress = 0;
   }

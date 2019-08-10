@@ -7,6 +7,7 @@
 #include "audio.h"
 #include "frequency_sensor.h"
 #include "render.h"
+#include "color.h"
 
 extern volatile int audio_frame_ready;
 extern TIM_HandleTypeDef htim1;
@@ -83,8 +84,13 @@ Audio_Processor_t *audio;
 uint32_t audio_buffer[AUDIO_FFT_SIZE];
 RenderMode2_t *render;
 
-static void drawPixel(int x, Color_AGBR c) {
-    APA107_SetPixel(display, x, 0, c);
+static void drawPixel(int x, Color_ABGR c) {
+    int y = 0;
+    if (x >= DISPLAY_WIDTH) {
+        x -= DISPLAY_WIDTH;
+        y = 1;
+    }
+    APA107_SetPixel(display, x, y, c);
 }
 
 void main_loop(void) {
@@ -109,22 +115,29 @@ void main_loop(void) {
     display = APA107_Init(DISPLAY_WIDTH, DISPLAY_HEIGHT, display_buffer, txDisplayDMA);
     Render2Params_t renderParams = {
         .pHeight = 1,
-        .pHScale = .1,
-        .pHOffset = 0,
+        .pHScale = 1,
+        .pHOffset = -0.5,
+        .pVHOffset = 0.5,
         .pWidth = 12,
         .pWScale = .1,
         .pWOffset = 0,
+        .pVWOffset = 0,
     };
     ColorParams_t colorParams = {
         .valueScale = 1,
-        .valueOffset = -1,
-        .saturationScale = 1,
-        .saturationOffset = -1,
-        .alphaScale = 1,
-        .alphaOffset = -1,
-        .maxAlpha = 0.25,
+        .valueOffset = 2,
+        .saturationScale = 4,
+        .saturationOffset = 4,
+        .alphaScale = 2,
+        .alphaOffset = 2,
+        .maxAlpha = 0.5,
+        .gamut = {
+            .red = 1,
+            .green = 1,
+            .blue = 1,
+        },
     };
-    render = NewRender2(&renderParams, &colorParams, 144, drawPixel);
+    render = NewRender2(&renderParams, &colorParams, DISPLAY_WIDTH*DISPLAY_HEIGHT, drawPixel);
 
     if (HAL_TIM_Base_Start(&htim6) != HAL_OK) {
         Error_Handler();
@@ -184,7 +197,19 @@ void main_loop(void) {
 
         if (audio_frame_ready) {
             audio_frame_ready = 0;
+
+            HAL_GPIO_WritePin(LD1_GPIO_Port, LD1_Pin, GPIO_PIN_SET);
             Audio_Process(audio, audio_buffer);
+            HAL_GPIO_WritePin(LD1_GPIO_Port, LD1_Pin, GPIO_PIN_RESET);
+
+
+            HAL_GPIO_WritePin(LD2_GPIO_Port, LD2_Pin, GPIO_PIN_SET);
+            Render2(render, audio->fs->drivers);
+
+            SCB_CleanDCache_by_Addr(display_buffer, APA107_BUFFER_SIZE(DISPLAY_WIDTH, DISPLAY_HEIGHT));
+            APA107_Show(display);
+
+            HAL_GPIO_WritePin(LD2_GPIO_Port, LD2_Pin, GPIO_PIN_RESET);
         }
     }
 }
@@ -226,19 +251,19 @@ void HAL_TIM_OC_DelayElapsedCallback(TIM_HandleTypeDef *htim) {
         //     Error_Handler();
         // }
 
-        if (display == NULL) return;
+        // if (display == NULL) return;
 
-        Color_HSV c = {0, 1., 1.};
-        Color_RGB rgb;
+        // Color_HSV c = {0, 1., 1.};
+        // Color_RGB rgb;
 
-        for (int i = 0; i < DISPLAY_WIDTH; i++) {
-            c.h = (toggle + i) % 360;
-            rgb = Color_FromHSV(c);
-            Color_ABGR abgr = {16, 255*rgb.b, 255*rgb.g, 255*rgb.r};
-            APA107_SetPixel(display, i, 0, abgr);
-        }
-        // TODO: use MPU to disable cache on buffer
-        SCB_CleanDCache();
-        APA107_Show(display);
+        // for (int i = 0; i < DISPLAY_WIDTH; i++) {
+        //     c.h = (toggle + i) % 360;
+        //     rgb = Color_FromHSV(c);
+        //     Color_ABGR abgr = {16, 255*rgb.b, 255*rgb.g, 255*rgb.r};
+        //     APA107_SetPixel(display, i, 0, abgr);
+        // }
+        // // TODO: use MPU to disable cache on buffer
+        // SCB_CleanDCache();
+        // APA107_Show(display);
     }
 }

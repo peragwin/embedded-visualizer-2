@@ -3,11 +3,11 @@
 #include <stdlib.h>
 
 static float to_log_scale(float val) {
-    return log2(log2(1 + val));
+    return (log2(1 + val));
 }
 
 static float from_log_scale(float val) {
-    return exp2(exp2(val)) - 1;
+    return (exp2(val)) - 1;
 }
 
 Bucketer_t* NewBucketer(int size, int buckets, float f_min, float f_max) {

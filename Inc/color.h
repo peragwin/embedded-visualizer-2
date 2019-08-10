@@ -2,6 +2,11 @@
 #define __COLOR_H
 
 typedef struct {
+    float red;
+    float green;
+    float blue;
+} ColorGamut_t;
+typedef struct {
     float r;       // a fraction between 0 and 1
     float g;       // a fraction between 0 and 1
     float b;       // a fraction between 0 and 1
@@ -27,6 +32,6 @@ typedef struct {
     float r;
 } Color_ABGRf;
 
-Color_RGB Color_FromHSV(Color_HSV in);
+Color_RGB Color_FromHSV(ColorGamut_t *g, Color_HSV in);
 
 #endif

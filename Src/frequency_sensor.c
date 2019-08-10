@@ -11,7 +11,7 @@ Filter_t* NewFilter(int size, float *params, int nparams) {
     memcpy(fparams, params, nparams*sizeof(float));
 
     Filter_t *f = (Filter_t*)malloc(sizeof(Filter_t));
-    f->params = params;
+    f->params = fparams;
     f->size = size;
     f->values = values;
     
@@ -34,11 +34,13 @@ FS_Drivers_t* NewDrivers(int size, int columns) {
     float *diff = (float*)calloc(size, sizeof(float));
     float *energy = (float*)calloc(size, sizeof(float));
     float *scales = (float*)calloc(size, sizeof(float));
+    for (int i = 0; i < size; i++) scales[i] = 1;
     
     FS_Drivers_t *d = (FS_Drivers_t*)malloc(sizeof(FS_Drivers_t));
     d->amp = amp;
     d->diff = diff;
     d->energy = energy;
+    d->scales = scales;
     d->bass = 0;
     d->size = size;
     d->length = columns;
@@ -47,7 +49,7 @@ FS_Drivers_t* NewDrivers(int size, int columns) {
 }
 
 FS_GainController_t* NewGainController(int size, float *filterParams, float kp, float kd) {
-    Filter_t *filter = NewFilter(size, filterParams); 
+    Filter_t *filter = NewFilter(size, filterParams, 2); 
 
     float *gain = (float*)calloc(size, sizeof(float));
     float *err = (float*)calloc(size, sizeof(float));
@@ -68,10 +70,11 @@ FS_Module_t* NewFrequencySensor(int size, int columns) {
     FS_Config_t *config = (FS_Config_t*)malloc(sizeof(FS_Config_t));
     config->offset = 0;
     config->gain = 2;
-    config->diffGain = 1e-2;
-    config->sync = 1e-1;
+    config->diffGain = 0.2;
+    config->sync = 8e-3;
     config->mode = 2;
     config->preemph = 2;
+    config->columnDivider = 1;
 
     float gainParams[2] = {
         0.20, 0.80,
@@ -94,10 +97,13 @@ FS_Module_t* NewFrequencySensor(int size, int columns) {
     Filter_t *diffFeedback = NewFilter(size, diffFeedbackP, 2);
 
     float scaleParams[4] = {
-        0.05, 0,95,
+        0.05, 0.95,
         0.001, 0.999,
-    }
+    };
     Filter_t *scaleFilter = NewFilter(size, scaleParams, 4);
+    for (int i = 0; i < size; i++) {
+        scaleFilter->values[i] = 1;
+    }
 
     float gainControllerParams[2] = {
         0.005, 0.995,
@@ -284,22 +290,18 @@ void apply_filters(FS_Module_t *f, float *frame) {
 
     apply_filter(f->gainFilter, frame);
     apply_filter(f->gainFeedback, frame);
-    arm_add_f32(f->gainFilter->values, f->gainFeedback->values, f->gainFilter->values, f->size);
 
     // calculate differential of this update
     arm_sub_f32(f->gainFilter->values, diff_input, diff_input, f->size);
 
     apply_filter(f->diffFilter, diff_input);
     apply_filter(f->diffFeedback, diff_input);
-    arm_add_f32(f->diffFilter->values, f->diffFeedback->values, f->diffFilter->values, f->size);
 }
 
 void apply_effects(FS_Module_t *f) {
     float dg = f->config->diffGain;
     float ag = f->config->gain;
     float ao = f->config->offset;
-    float *gain = f->gainFilter->values;
-    float *diff = f->diffFilter->values;
 
     // apply column animation
     if (f->config->mode == 1 || f->config->mode == 2) {
@@ -310,7 +312,7 @@ void apply_effects(FS_Module_t *f) {
             float decay = 1.0 - (2.0 / (float)f->columns);
             for (int i = 0; i < f->columns; i++) {
                 for (int j = 0; j < f->size; j++) {
-                    f->drivers->amp[i+1][j] *= decay;
+                    f->drivers->amp[i][j] *= decay;
                 }
             }
         }
@@ -318,12 +320,14 @@ void apply_effects(FS_Module_t *f) {
 
     f->drivers->columnIdx = f->columnIdx;
     float *amp = f->drivers->amp[f->columnIdx];
-    float *fs_diff = f->drivers->diff;
+
+    arm_add_f32(f->gainFilter->values, f->gainFeedback->values, amp, f->size);
+
+    float *diff = f->drivers->diff;
+    arm_add_f32(f->diffFilter->values, f->diffFeedback->values, diff, f->size);
+
     float *energy = f->drivers->energy;
     float ph;
-    memcpy(amp, gain, f->size * sizeof(float));
-    // memcpy(fs_diff, diff, f->size * sizeof(float)); // maybe dont need to copy this
-    fs_diff = diff;
     for (int i = 0; i < f->size; i++) {
         amp[i] = ao + ag * amp[i];
         ph = energy[i] + .001;
@@ -401,7 +405,7 @@ void apply_scaling(FS_Module_t *f, float *frame) {
 void FS_Process(FS_Module_t *f, float *frame) {
     f->renderLock = 1;
     apply_preemphasis(f, frame);
-    apply_gain_control(f, frame);
+    apply_gain_control(f->gc, frame);
     apply_filters(f, frame);
     apply_effects(f);
     apply_sync(f);

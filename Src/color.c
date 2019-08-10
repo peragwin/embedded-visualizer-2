@@ -1,6 +1,7 @@
 #include "color.h"
+#include "math.h"
 
-Color_RGB Color_FromHSV(Color_HSV in)
+Color_RGB Color_FromHSV(ColorGamut_t *g, Color_HSV in)
 {
     float      hh, p, q, t, ff;
     int        i;
@@ -55,5 +56,10 @@ Color_RGB Color_FromHSV(Color_HSV in)
         out.b = q;
         break;
     }
+
+    // out.r = powf(out.r, g->red);
+    // out.g = powf(out.g, g->green);
+    // out.b = powf(out.b, g->blue);
+
     return out;     
 }

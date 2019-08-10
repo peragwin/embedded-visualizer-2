@@ -1,6 +1,7 @@
 #ifndef __FREQUENCY_SENSOR_H
 #define __FREQUENCY_SENSOR_H
 
+#include "stm32h743xx.h"
 #include "arm_math.h"
 #include "bucketer.h"
 
@@ -81,6 +82,6 @@ typedef struct {
 Audio_Processor_t* NewAudioProcessor(int size, int buckets, int columns, short* dacBuffer);
 void Audio_Process(Audio_Processor_t *a, int *input);
 void FS_Process(FS_Module_t *f, float *input);
-float* FS_GetColumn(FS_Module_t *f, int column);
+float* FS_GetColumn(FS_Drivers_t *d, int column);
 
 #endif
