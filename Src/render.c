@@ -79,7 +79,8 @@ void Render2(RenderMode2_t *r, FS_Drivers_t *drivers) {
         int yoffset = y * width;
 
         float val = amp[i] * scales[i];
-        Color_ABGRf color = get_hsv(r->colorParams, val, phase[i], 0);
+        float phi = 2*PI / r->colorParams->period * center;
+        Color_ABGRf color = get_hsv(r->colorParams, val, phase[i], phi);
 
         float pheight = ph * sigmoid(phs * val + pvho) + pho;
         float pwidth = pw * sigmoid(pws * val + pvwo) + pwo;

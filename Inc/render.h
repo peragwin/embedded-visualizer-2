@@ -12,6 +12,7 @@ typedef struct {
     float alphaScale;
     float alphaOffset;
     float maxAlpha;
+    float period;
     ColorGamut_t gamut;
 } ColorParams_t;
 

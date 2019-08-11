@@ -97,7 +97,7 @@ FS_Module_t* NewFrequencySensor(int size, int columns) {
     Filter_t *diffFeedback = NewFilter(size, diffFeedbackP, 2);
 
     float scaleParams[4] = {
-        0.001, 0.999,
+        0.01, 0.99,
         0.0005, 0.9995,
     };
     Filter_t *scaleFilter = NewFilter(size, scaleParams, 4);
@@ -171,6 +171,8 @@ void convert_to_signed(int *input, int *output, int size) {
     }
 }
 
+// static long avg = 0;
+
 // removes the dc component by subtracting the average
 void remove_dc_component(int *input, int *output, int size) {
     long sum = 0;
@@ -178,6 +180,9 @@ void remove_dc_component(int *input, int *output, int size) {
         sum += input[i];
     }
     sum /= size;
+
+    // avg = (5 * sum + 99995 * avg) / 100000;
+
     for (int i = 0; i < size; i++) {
         output[i] = input[i] - sum;
     }
@@ -218,7 +223,7 @@ void write_audio_dac_output(float *input, short *output, int size) {
     
     max = 1./max;
     if (max < dac_scale) dac_scale = max;
-    else dac_scale = .001 * max + .999 * dac_scale; 
+    else dac_scale = .0001 * max + .9999 * dac_scale; 
     
     for (int i = 1; i < size; i++) {
         output[i] = 0xfff * (input[i] * dac_scale / 2 + 0.5);
@@ -248,6 +253,7 @@ void write_fft_dac_output(float *input, short *output, int size) {
     SCB_CleanDCache_by_Addr(output, size*2);
 }
 
+int audio_process_count = 0;
 
 void Audio_Process(Audio_Processor_t *a, int *input) {
     SCB_InvalidateDCache_by_Addr(input, a->size*4);
@@ -260,12 +266,13 @@ void Audio_Process(Audio_Processor_t *a, int *input) {
     float bucketFrame[a->bucketer->buckets];
 
     convert_to_float(input, frame, a->size);
-    //write_audio_dac_output(frame, a->dacOutput, a->size);
+    if (audio_process_count++ % (1024 / 64) == 0)
+        write_audio_dac_output(frame, a->dacOutput, a->size);
 
     apply_window(frame, a->window, a->size);
 
     power_spectrum(a->fft, frame, fftFrame);
-    write_fft_dac_output(fftFrame, a->dacOutput, a->size);
+    // write_fft_dac_output(fftFrame, a->dacOutput, a->size);
 
     Bucket(a->bucketer, fftFrame, bucketFrame);
 

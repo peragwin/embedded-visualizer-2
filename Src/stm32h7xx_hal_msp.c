@@ -189,14 +189,14 @@ void HAL_SPI_MspInit(SPI_HandleTypeDef* hspi)
     GPIO_InitStruct.Pin = GPIO_PIN_5;
     GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
     GPIO_InitStruct.Pull = GPIO_NOPULL;
-    GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
+    GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
     GPIO_InitStruct.Alternate = GPIO_AF5_SPI1;
     HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
     GPIO_InitStruct.Pin = GPIO_PIN_7;
     GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
     GPIO_InitStruct.Pull = GPIO_NOPULL;
-    GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
+    GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
     GPIO_InitStruct.Alternate = GPIO_AF5_SPI1;
     HAL_GPIO_Init(GPIOD, &GPIO_InitStruct);
 
@@ -223,7 +223,7 @@ void HAL_SPI_MspInit(SPI_HandleTypeDef* hspi)
     __HAL_LINKDMA(hspi,hdmatx,hdma_spi1_tx);
 
     /* SPI1 interrupt Init */
-    HAL_NVIC_SetPriority(SPI1_IRQn, 0, 0);
+    HAL_NVIC_SetPriority(SPI1_IRQn, 4, 0);
     HAL_NVIC_EnableIRQ(SPI1_IRQn);
   /* USER CODE BEGIN SPI1_MspInit 1 */
 
@@ -322,7 +322,7 @@ void HAL_TIM_MspPostInit(TIM_HandleTypeDef* htim)
     HAL_GPIO_Init(GPIOE, &GPIO_InitStruct);
 
   /* USER CODE BEGIN TIM1_MspPostInit 1 */
-  HAL_NVIC_SetPriority(TIM1_CC_IRQn, 1, 1);
+  HAL_NVIC_SetPriority(TIM1_CC_IRQn, 5, 1);
   HAL_NVIC_EnableIRQ(TIM1_CC_IRQn);
   /* USER CODE END TIM1_MspPostInit 1 */
   }
