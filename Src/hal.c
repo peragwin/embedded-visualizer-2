@@ -1,4 +1,5 @@
 #include "hal.h"
+#include "main.h"
 
 void GPIO_SetBit(char gpio, int pin, int state) {
     GPIO_TypeDef *g;
@@ -31,5 +32,24 @@ int SPI_SendData(char spi, int data_p, int size) {
     if (HAL_SPI_Transmit(s, (uint32_t)data_p, size, 1000) != HAL_OK) {
         return -1;
     }
+    return 0;
+}
+
+static void (*spi_callback) (void);
+
+void SPI_DMA_Callback(DMA_HandleTypeDef *hdma) {
+    spi_callback();
+}
+
+int SPI_SendDataDMA(char spi, int data_p, int size, void (*callback) (void)) {
+    SPI_HandleTypeDef *s;
+    if (spi == 1) {
+        s = &hspi1;
+    } else {
+        return -2;
+    }
+    spi_callback = callback;
+    s->hdmatx->XferCpltCallback = SPI_DMA_Callback;
+    HandleError(HAL_SPI_Transmit_DMA(s, data_p, size), 0);
     return 0;
 }

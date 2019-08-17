@@ -1,6 +1,7 @@
 
 #include "hal.h"
 #include "ssd1331.h"
+#include "color.h"
 
 void ms_delay(unsigned ms)
 {
@@ -35,6 +36,15 @@ void XSPI_SendDataSize(uint8_t *data, int size)
     }
 
     GPIO_SetBit(GPIO_PORT, CE0_GPIO, 1);
+}
+
+void spiDMACallback(void) {
+    GPIO_SetBit(GPIO_PORT, CE0_GPIO, 1);
+}
+
+void XSPI_SendBufferDMA(uint16_t *buf) {
+    GPIO_SetBit(GPIO_PORT, CE0_GPIO, 0);
+    SPI_SendDataDMA(SPI_PORT, (uint32_t)buf, SSD1331_DISPLAYWIDTH*SSD1331_DISPLAYHEIGHT*2, spiDMACallback);
 }
 
 void sendCommand(uint8_t cmd)
@@ -142,7 +152,10 @@ uint16_t Color16(uint8_t r, uint8_t g, uint8_t b)
 	color |= ((uint16_t)(g >> 2) & 0x3F) << 5;
 	color |= ((uint16_t)(b >> 3) & 0x1F);
 
-	return color;
+    uint16_t c_h = (color >> 8) & 0xFF;
+    uint16_t c_l = (color & 0xFF) << 8;
+
+	return c_h | c_l;
 }
 
 void SSD1331_DrawPixels(int x, int y, int w, int h, uint8_t *data) {
@@ -153,4 +166,16 @@ void SSD1331_DrawPixels(int x, int y, int w, int h, uint8_t *data) {
     // for (int i = 0; i < 2*w*h; i++)
     //     XSPI_SendData(data[i]);
     XSPI_SendDataSize(data, w*h);
+}
+
+void SSD1331_SetPixel(uint16_t *buf, int x, int y, Color_ABGR c) {
+    uint16_t color = Color16(c.r, c.g, c.b);
+    int bidx = x + SSD1331_DISPLAYWIDTH * y;
+    buf[bidx] = color;
+}
+
+void SSD1331_ShowBufferDMA(uint16_t *buf) {
+    setAddrWindow(0, 0, SSD1331_DISPLAYWIDTH, SSD1331_DISPLAYHEIGHT);
+    GPIO_SetBit(GPIO_PORT, DC_GPIO, 1);
+    XSPI_SendBufferDMA(buf);
 }

@@ -40,4 +40,46 @@ RenderMode2_t* NewRender2(Render2Params_t *params, ColorParams_t *colorParams, i
     void (*setPixel) (int x, int y, Color_ABGR c));
 void Render2(RenderMode2_t *r, FS_Drivers_t *drivers);
 
+
+typedef struct {
+    float warpScale;
+    float warpOffset;
+    float scaleScale;
+    float scaleOffset;
+    float aspect;
+} Render3_Params_t;
+
+typedef struct {
+    float x;
+    float y;
+    int srcX;
+    int srcY;
+} Render3_GridPoint_t;
+
+typedef struct {
+    Render3_GridPoint_t *points;
+    int columns;
+    int rows;
+    int displayWidth;
+    int displayHeight;
+    Render3_Params_t *params;
+    ColorParams_t *colorParams;
+
+    void (*setPixel) (int x, int y, Color_ABGR c);
+    void (*show) (void);
+} RenderMode3_t;
+
+RenderMode3_t *NewRender3(
+    int displayWidth,
+    int displayHeight,
+    int rows,
+    int columns,
+    Render3_Params_t *params,
+    ColorParams_t *colorParams,
+    void (*setPixel) (int x, int y, Color_ABGR c),
+    void (*show) (void)
+);
+
+void Render3(RenderMode3_t *r, FS_Drivers_t *drivers);
+
 #endif

@@ -68,37 +68,49 @@ uint8_t red = 255;
 uint8_t gre = 255;
 uint8_t blu = 255;
 
-uint8_t display_buffer[APA107_BUFFER_SIZE(DISPLAY_WIDTH, DISPLAY_HEIGHT)] __attribute__ ((section(".spi_dma_buffer"))) __attribute__ ((aligned (32)));
+// uint8_t display_buffer[APA107_BUFFER_SIZE(DISPLAY_WIDTH, DISPLAY_HEIGHT)] __attribute__ ((section(".spi_dma_buffer"))) __attribute__ ((aligned (32)));
+uint16_t display_buffer[SSD1331_DISPLAYWIDTH * SSD1331_DISPLAYHEIGHT] __attribute__ ((section(".spi_dma_buffer"))) __attribute__ ((aligned (32)));
 uint16_t dacBuffer[AUDIO_FFT_SIZE] __attribute__ ((section(".dac_dma_buffer"))) __attribute__ ((aligned (32)));
 
-void txDisplayDMA(uint8_t *buffer, int size) {
-    // __HAL_SPI_CLEAR_EOTFLAG(&hspi1);
-    // __HAL_SPI_ENABLE_IT(&hspi1, SPI_IT_EOT);
-    HandleError(HAL_SPI_Transmit_DMA(&hspi1, (uint32_t)display_buffer, size), 1);
-}
 
-APA107 *display = NULL;
+// void txDisplayDMA(uint8_t *buffer, int size) {
+//     // __HAL_SPI_CLEAR_EOTFLAG(&hspi1);
+//     // __HAL_SPI_ENABLE_IT(&hspi1, SPI_IT_EOT);
+//     HandleError(HAL_SPI_Transmit_DMA(&hspi1, (uint32_t)display_buffer, size), 1);
+// }
+
+// APA107 *display = NULL;
 Audio_Processor_t *audio;
 uint32_t audio_buffer[AUDIO_FFT_SIZE];
-RenderMode2_t *render;
+// RenderMode2_t *render;
+RenderMode3_t *render;
 
-static void drawPixel(int x, int y, Color_ABGR c) {
-    // int y = 0;
-    // if (x >= DISPLAY_WIDTH) {
-    //     x -= DISPLAY_WIDTH;
-    //     y = 1;
-    // }
-    APA107_SetPixel(display, x, y, c);
+// static void drawPixel(int x, int y, Color_ABGR c) {
+//     // int y = 0;
+//     // if (x >= DISPLAY_WIDTH) {
+//     //     x -= DISPLAY_WIDTH;
+//     //     y = 1;
+//     // }
+//     APA107_SetPixel(display, x, y, c);
+// }
+
+static void setPixel(int x, int y, Color_ABGR c) {
+    SSD1331_SetPixel(display_buffer, x, y, c);
+}
+
+static void showDisplay(void) {
+    SCB_CleanDCache_by_Addr(display_buffer, SSD1331_DISPLAYWIDTH*SSD1331_DISPLAYHEIGHT*2);
+    SSD1331_ShowBufferDMA(display_buffer);
 }
 
 void main_loop(void) {
-    init_sin_table();
+    // init_sin_table();
     rot0.increment = incrementRot0;
     rot0.decrement = decrementRot0;
     rot1.increment = incrementRot1;
     rot1.decrement = decrementRot1;
 
-	Color_RGB color;
+	// Color_RGB color;
 
 	// LCD_Printf("ILI9486 driver\n"
 	// 	"STM32F4 - NUCLEO-F446RE\n"
@@ -109,25 +121,33 @@ void main_loop(void) {
         Error_Handler();
     }
 
-    audio = NewAudioProcessor(AUDIO_FFT_SIZE, 36, 4, dacBuffer);
-    display = APA107_Init(DISPLAY_WIDTH, DISPLAY_HEIGHT, display_buffer, txDisplayDMA);
-    Render2Params_t renderParams = {
-        .pHeight = 1,
-        .pHScale = 1,
-        .pHOffset = -0.5,
-        .pVHOffset = 1,
-        .pWidth = 12,
-        .pWScale = .15,
-        .pWOffset = 0,
-        .pVWOffset = -.5,
+    audio = NewAudioProcessor(AUDIO_FFT_SIZE, 36, 60, dacBuffer);
+    // display = APA107_Init(DISPLAY_WIDTH, DISPLAY_HEIGHT, display_buffer, txDisplayDMA);
+    // Render2Params_t renderParams = {
+    //     .pHeight = 1,
+    //     .pHScale = 1,
+    //     .pHOffset = -0.5,
+    //     .pVHOffset = 1,
+    //     .pWidth = 12,
+    //     .pWScale = .15,
+    //     .pWOffset = 0,
+    //     .pVWOffset = -.5,
+    // };
+    Render3_Params_t renderParams = {
+        .warpScale = 4,
+        .warpOffset = .8,
+        .scaleScale = 1,
+        .scaleOffset = 1,
+        .aspect = 1,
     };
+
     ColorParams_t colorParams = {
         .valueScale = 1,
-        .valueOffset = 1,
+        .valueOffset = 0,
         .saturationScale = .75,
         .saturationOffset = 0,
-        .alphaScale = 2,
-        .alphaOffset = 2,
+        .alphaScale = 0,
+        .alphaOffset = 0,
         .maxAlpha = 0.5,
         .period = DISPLAY_WIDTH * 3,
         .gamut = {
@@ -136,7 +156,13 @@ void main_loop(void) {
             .blue = 1,
         },
     };
-    render = NewRender2(&renderParams, &colorParams, DISPLAY_WIDTH*DISPLAY_HEIGHT, DISPLAY_HEIGHT, drawPixel);
+    // render = NewRender2(&renderParams, &colorParams, DISPLAY_WIDTH*DISPLAY_HEIGHT, DISPLAY_HEIGHT, drawPixel);
+    render = NewRender3(SSD1331_DISPLAYWIDTH, SSD1331_DISPLAYHEIGHT, 36, 60,
+        &renderParams, &colorParams,
+        setPixel,
+        showDisplay
+    );
+
 
     if (HAL_TIM_Base_Start(&htim6) != HAL_OK) {
         Error_Handler();
@@ -201,14 +227,16 @@ void main_loop(void) {
             Audio_Process(audio, audio_buffer);
             HAL_GPIO_WritePin(LD1_GPIO_Port, LD1_Pin, GPIO_PIN_RESET);
 
+            if (ph++ % 16 == 0) { 
 
             HAL_GPIO_WritePin(LD2_GPIO_Port, LD2_Pin, GPIO_PIN_SET);
-            Render2(render, audio->fs->drivers);
+            Render3(render, audio->fs->drivers);
 
-            SCB_CleanDCache_by_Addr(display_buffer, APA107_BUFFER_SIZE(DISPLAY_WIDTH, DISPLAY_HEIGHT));
-            APA107_Show(display);
+            // SCB_CleanDCache_by_Addr(display_buffer, APA107_BUFFER_SIZE(DISPLAY_WIDTH, DISPLAY_HEIGHT));
+            // APA107_Show(display);
 
             HAL_GPIO_WritePin(LD2_GPIO_Port, LD2_Pin, GPIO_PIN_RESET);
+            }
         }
     }
 }

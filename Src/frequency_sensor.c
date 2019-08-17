@@ -72,7 +72,7 @@ FS_Module_t* NewFrequencySensor(int size, int columns) {
     config->gain = 2;
     config->diffGain = 0.05;
     config->sync = 1e-3;
-    config->mode = 2;
+    config->mode = 1;
     config->preemph = 2;
     config->columnDivider = 1;
 
@@ -138,7 +138,7 @@ static void init_blackman_window(float *window, int size) {
     float c2 = arm_cos_f32(4.0 * PI * (float)i / (float)(size - 1));
     float c3 = arm_cos_f32(6.0 * PI * (float)i / (float)(size - 1));
     window[i] = 0.35875 - 0.48829 * c1 + 0.14128 * c2 - 0.01168 * c3;
-    window[i] /= 32768; // 2**15 to get a range of [-1, 1]
+    window[i] /= 0x800000; //32768; // 2**15 to get a range of [-1, 1]
   }
 }
 
@@ -255,6 +255,8 @@ void write_fft_dac_output(float *input, short *output, int size) {
 
 int audio_process_count = 0;
 
+static float fftSum = 0;
+
 void Audio_Process(Audio_Processor_t *a, int *input) {
     SCB_InvalidateDCache_by_Addr(input, a->size*4);
 
@@ -273,6 +275,15 @@ void Audio_Process(Audio_Processor_t *a, int *input) {
 
     power_spectrum(a->fft, frame, fftFrame);
     // write_fft_dac_output(fftFrame, a->dacOutput, a->size);
+
+    float sum = 0;
+    for (int i = 1; i < a->size; i++) {
+        sum += fftFrame[i];
+    }
+    int badFrame = 0;
+    if (audio_process_count > 1000 && sum > (16 * fftSum)) badFrame = 1; //Error_Handler();
+    fftSum = .1 * sum + .9 * fftSum;
+    if (badFrame) return;
 
     Bucket(a->bucketer, fftFrame, bucketFrame);
 

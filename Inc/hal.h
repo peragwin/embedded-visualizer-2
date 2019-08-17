@@ -9,3 +9,5 @@ void GPIO_SetBit(char gpio, int pin, int state);
 
 // select spi instance using integer
 int SPI_SendData(char spi, int data_p, int size);
+
+int SPI_SendDataDMA(char spi, int data_p, int size, void (*callback) (void));

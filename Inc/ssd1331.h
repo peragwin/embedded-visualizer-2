@@ -3,6 +3,7 @@
 #define __SSD1331_H
 
 #include "stm32h7xx_hal.h"
+#include "color.h"
 
 #define SPI_PORT    1
 
@@ -10,6 +11,9 @@
 #define CE0_GPIO	8
 #define RS_GPIO		9
 #define DC_GPIO		10
+
+#define SSD1331_DISPLAYWIDTH 96
+#define SSD1331_DISPLAYHEIGHT 64
 
 // Select one of these defines to set the pixel color order
 #define SSD1331_COLORORDER_RGB
@@ -56,5 +60,8 @@
 void SSD1331_Init(void);
 uint16_t Color16(uint8_t r, uint8_t g, uint8_t b);
 void SSD1331_DrawPixels(int x, int y, int w, int h, uint8_t *data);
+void SSD1331_SetPixel(uint16_t *buf, int x, int y, Color_ABGR c);
+void SSD1331_ShowBufferDMA(uint16_t *buf);
+
 
 #endif

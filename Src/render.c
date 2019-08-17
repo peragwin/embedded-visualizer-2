@@ -127,3 +127,158 @@ void Render2(RenderMode2_t *r, FS_Drivers_t *drivers) {
         }
     }
 }
+
+RenderMode3_t *NewRender3(
+    int displayWidth,
+    int displayHeight,
+    int rows,
+    int columns,
+    Render3_Params_t *params,
+    ColorParams_t *colorParams,
+    void (*setPixel) (int x, int y, Color_ABGR c),
+    void (*show) (void)
+) {
+    RenderMode3_t *r = (RenderMode3_t *)malloc(sizeof(RenderMode3_t));
+    r->displayWidth = displayWidth;
+    r->displayHeight = displayHeight;
+    r->rows = rows;
+    r->columns = columns;
+    r->params = params;
+    r->colorParams = colorParams;
+    r->show = show;
+    r->setPixel = setPixel;
+
+    int psize = rows * columns;
+    Render3_GridPoint_t *points = (Render3_GridPoint_t*)malloc(psize * sizeof(Render3_GridPoint_t));
+    for (int x = 0; x < columns; x++) {
+        for (int y = 0; y < rows; y++) {
+            float xf = (float)x / (float)displayWidth;
+            float yf = (float)y / (float)displayHeight * params->aspect;
+            Render3_GridPoint_t p = {
+                .x = xf,
+                .y = yf,
+                .srcX = x,
+                .srcY = y,
+            };
+            points[x+y*columns] = p;
+        }
+    }
+    r->points = points;
+
+    return r;
+}
+
+void Render3_GetDisplayXY(Render3_GridPoint_t *g, int w, int h, int *x, int *y) {
+    int xv = (int)(g->x * w + 0.5);
+    int yv = (int)(g->y * h + 0.5);
+    if (xv < 0) xv = 0;
+    if (xv >= w) xv = w - 1;
+    if (yv < 0) yv = 0;
+    if (yv >= h) yv = h - 1;
+    *x = xv;
+    *y = yv;
+}
+
+Render3_GridPoint_t Render3_ApplyWarp(Render3_GridPoint_t *g, float w, float s) {
+    Render3_GridPoint_t p;
+    if (g->x <= 0) p.x = powf(g->x + 1., w) - 1.;
+    else p.x = 1. - powf(1. - g->x, w);
+    if (g->y <= 0) {
+        s = (1. + g->y / 2) * s;
+        p.y = powf(g->y + 1., s) - 1.;
+    } else {
+        s = (1. - g->y / 2) * s;
+        p.y = 1. - powf(1 - g->y, s);
+    }
+    return p;
+}
+
+void Render3(RenderMode3_t *r, FS_Drivers_t *drivers) {
+
+    // todo: optimize this by calculating it in freq sensor once for new frames and then decay
+    float scales[r->columns];
+    for (int i = 0; i < r->columns; i++) {
+        float s = 0;
+        for (int j = 0; j < r->rows; j++) {
+            float *amps = FS_GetColumn(drivers, i);
+            s += (amps[j]) * drivers->scales[j];
+        }
+        s /= r->rows;
+        scales[i] = s;
+    }
+
+    int dsize = r->displayWidth * r->displayHeight / 4;
+    Color_ABGRf buffer[dsize];
+    for (int i = 0; i < dsize; i++) {
+        Color_ABGRf c = {0,0,0,0};
+        buffer[i] = c;
+    }
+
+    float warpScale =  r->params->warpScale;
+    float warpOffset = r->params->warpOffset;
+    float scaleScale = r->params->scaleScale;
+    float scaleOffset = r->params->scaleOffset;
+
+    int rsize = r->rows * r->columns;
+    for (int i = 0; i < rsize; i++) {
+        Render3_GridPoint_t g = r->points[i];
+
+        int wi = g.srcY; // r->rows - 1 - g.srcY;
+        float warp = warpScale * drivers->diff[wi] + warpOffset;
+        int si = g.srcX; // r->columns - 1 - g.srcX;
+        float scale = scaleScale * scales[si] + scaleOffset;
+        Render3_GridPoint_t p = Render3_ApplyWarp(&g, warp, scale);
+        int x, y;
+        Render3_GetDisplayXY(&p, r->displayWidth/2, r->displayHeight/2, &x, &y);
+        int bufIdx = x + r->displayWidth/2 * y;
+
+        float *amps = FS_GetColumn(drivers, si);
+        float amp = drivers->scales[wi] * (amps[wi] - 1);
+        float phase = drivers->energy[wi];
+        float phi = 2.0 * PI / r->colorParams->period * si;
+        Color_ABGRf c1 = get_hsv(r->colorParams, amp, phase, phi);
+        Color_ABGRf c2 = buffer[bufIdx];
+
+        float wc1 = c1.a + c1.b + c1.g + c1.r;
+        wc1 /= 4;
+        float wc2 = c2.a + c2.b + c2.g + c2.r;
+        wc2 /= 4;
+        float sw = 1 / (wc1 + wc2);
+        float sc1 = wc1 * sw;
+        float sc2 = wc2 * sw;
+
+        c2.a = c1.a * sc1 + c2.a * sc2;
+        c2.b = c1.b * sc1 + c2.b * sc2;
+        c2.g = c1.g * sc1 + c2.g * sc2;
+        c2.r = c1.r * sc1 + c2.r * sc2;
+
+        if (c2.a > 1) c2.a = 1;
+        if (c2.b > 1) c2.b = 1;
+        if (c2.g > 1) c2.g = 1;
+        if (c2.r > 1) c2.r = 1;
+
+        buffer[bufIdx] = c2;
+    }
+
+    int yo = r->displayHeight/2;
+    int xo = r->displayWidth/2;
+    for (int x = 0; x < r->displayWidth/2; x++) {
+        for (int y = 0; y < r->displayHeight/2; y++) {
+            int bidx = x + y * r->displayWidth/2;
+            Color_ABGRf cf = buffer[bidx];
+            Color_ABGR c;
+
+            c.a = (char)(255 * cf.a);
+            c.b = (char)(255 * cf.b);
+            c.g = (char)(255 * cf.g);
+            c.r = (char)(255 * cf.r);
+
+            r->setPixel(xo+x, yo+y, c);
+            r->setPixel(xo-1-x, yo+y, c);
+            r->setPixel(xo+x, yo-1-y, c);
+            r->setPixel(xo-1-x, yo-1-y, c);
+        }
+    }
+
+    r->show();
+}

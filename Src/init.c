@@ -3,7 +3,7 @@
 // #include "ssd1331.h"
 
 int main_init(void) {
-    // SSD1331_Init();
+    SSD1331_Init();
 
 
 
