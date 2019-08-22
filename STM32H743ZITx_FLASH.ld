@@ -59,6 +59,7 @@ _Min_Heap_Size = 0x200;      /* required amount of heap  */
 _Min_Stack_Size = 0x400; /* required amount of stack */
 _Max_Audio_Size = 0x4000; /* 16KB or 4096 samples */
 _Max_Display_Size = 0x5000; /* ~20KB or hopefully enough for a 64x64 grid */
+_Max_Dac_Size = 0x1000; /* 4kb or 1024 samples */
 
 /* Specify the memory areas */
 MEMORY
@@ -193,21 +194,34 @@ SECTIONS
   .spi_dma_buffer :
   {
    . = ALIGN(4);
-   . = . + _Max_Audio_Size;
+   /*. = . + _Max_Audio_Size;*/
 
    *(.spi_dma_buffer)
     
-  } >RAM_D1
+  } >RAM_D2
   
   /* Define a location on D1 for the DAC DMA buffer */
   .dac_dma_buffer :
   {
    . = ALIGN(4);
-   . = . + _Max_Audio_Size;
+   /*. = . + _Max_Audio_Size;*/
    . = . + _Max_Display_Size;
 
    *(.dac_dma_buffer)
     
+  } >RAM_D2
+
+  /* Define a location for color LUT */
+  .clut_buffer :
+  {
+    . = ALIGN(4);
+    . = . + _Max_Audio_Size;
+    /*
+    . = . + _Max_Display_Size;
+    . = . + _Max_Dac_Size;
+    */
+
+    *(.clut_buffer)
   } >RAM_D1
 
   /* Remove information from the standard libraries */

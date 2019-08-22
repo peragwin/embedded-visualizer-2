@@ -71,7 +71,7 @@ uint8_t blu = 255;
 // uint8_t display_buffer[APA107_BUFFER_SIZE(DISPLAY_WIDTH, DISPLAY_HEIGHT)] __attribute__ ((section(".spi_dma_buffer"))) __attribute__ ((aligned (32)));
 uint16_t display_buffer[SSD1331_DISPLAYWIDTH * SSD1331_DISPLAYHEIGHT] __attribute__ ((section(".spi_dma_buffer"))) __attribute__ ((aligned (32)));
 uint16_t dacBuffer[AUDIO_FFT_SIZE] __attribute__ ((section(".dac_dma_buffer"))) __attribute__ ((aligned (32)));
-
+float clutBuffer[360 * 100 * 3] __attribute__ ((section(".clut_buffer"))) __attribute__ ((aligned (32)));
 
 // void txDisplayDMA(uint8_t *buffer, int size) {
 //     // __HAL_SPI_CLEAR_EOTFLAG(&hspi1);
@@ -155,6 +155,7 @@ void main_loop(void) {
             .green = 1,
             .blue = 1,
         },
+        .clut = clutBuffer,
     };
     // render = NewRender2(&renderParams, &colorParams, DISPLAY_WIDTH*DISPLAY_HEIGHT, DISPLAY_HEIGHT, drawPixel);
     render = NewRender3(SSD1331_DISPLAYWIDTH, SSD1331_DISPLAYHEIGHT, 36, 60,

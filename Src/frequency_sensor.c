@@ -69,12 +69,12 @@ FS_Module_t* NewFrequencySensor(int size, int columns) {
 
     FS_Config_t *config = (FS_Config_t*)malloc(sizeof(FS_Config_t));
     config->offset = 0;
-    config->gain = 2;
+    config->gain = 4;
     config->diffGain = 0.05;
     config->sync = 1e-3;
     config->mode = 1;
-    config->preemph = 2;
-    config->columnDivider = 1;
+    config->preemph = 1;
+    config->columnDivider = 2;
 
     float gainParams[2] = {
         0.20, 0.80,
@@ -281,8 +281,8 @@ void Audio_Process(Audio_Processor_t *a, int *input) {
         sum += fftFrame[i];
     }
     int badFrame = 0;
-    if (audio_process_count > 1000 && sum > (16 * fftSum)) badFrame = 1; //Error_Handler();
-    fftSum = .1 * sum + .9 * fftSum;
+    if (audio_process_count > 1000 && sum > (32 * fftSum)) badFrame = 1; //Error_Handler();
+    fftSum = .01 * sum + .99 * fftSum;
     if (badFrame) return;
 
     Bucket(a->bucketer, fftFrame, bucketFrame);
@@ -347,6 +347,8 @@ void apply_filters(FS_Module_t *f, float *frame) {
     apply_filter(f->diffFeedback, diff_input);
 }
 
+static int effectCounter = 0;
+
 void apply_effects(FS_Module_t *f) {
     float dg = f->config->diffGain;
     float ag = f->config->gain;
@@ -354,14 +356,18 @@ void apply_effects(FS_Module_t *f) {
 
     // apply column animation
     if (f->config->mode == 1 || f->config->mode == 2) {
-        f->columnIdx++;
-        f->columnIdx %= f->columns;
-        if (f->config->mode == 1) { // columns decay
-            // TODO: decimate updates to fit into output size
-            float decay = 1.0 - (2.0 / (float)f->columns);
-            for (int i = 0; i < f->columns; i++) {
-                for (int j = 0; j < f->size; j++) {
-                    f->drivers->amp[i][j] *= decay;
+        effectCounter++;
+        effectCounter %= f->config->columnDivider;
+        if (effectCounter == 0) {
+            f->columnIdx++;
+            f->columnIdx %= f->columns;
+            if (f->config->mode == 1) { // columns decay
+                // TODO: decimate updates to fit into output size
+                float decay = 1.0 - (2.0 / (float)f->columns);
+                for (int i = 0; i < f->columns; i++) {
+                    for (int j = 0; j < f->size; j++) {
+                        f->drivers->amp[i][j] *= decay;
+                    }
                 }
             }
         }

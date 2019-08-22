@@ -25,6 +25,14 @@ static float sigmoid(float x) {
     return (1.0 + x / (1.0 + a)) / 2.0;
 }
 
+void clut(float* t, double hue, double sat, double val, double *r, double *g, double *b) {
+    int ti = (int)hue + 360 * (int)val;
+    ti *= 3;
+    *r = (double)t[ti];
+    *g = (double)t[ti+1];
+    *b = (double)t[ti+2];
+}
+
 static Color_ABGRf get_hsv(ColorParams_t *params, float amp, float phase, float phi) {
     float vs = params->valueScale;
     float vo = params->valueOffset;
@@ -41,7 +49,11 @@ static Color_ABGRf get_hsv(ColorParams_t *params, float amp, float phase, float 
     float alp = sigmoid(as * amp + ao);
 
     double r, g, b;
-    hsluv2rgb((double)hue, 100, 100*(double)val, &r, &g, &b);
+    if (params->clut == NULL) {
+        hsluv2rgb((double)hue, 100, 100*(double)val, &r, &g, &b);
+    } else {
+        clut(params->clut, hue, 100, 100*val, &r, &g, &b);
+    }
     r *= r;
     g *= g;
     b *= b;
@@ -165,6 +177,21 @@ RenderMode3_t *NewRender3(
     }
     r->points = points;
 
+    if (r->colorParams->clut != NULL) {
+        for (int h = 0; h < 360; h++) {
+            for (int v = 0; v < 100; v++) {
+                double re, g, b;
+                hsluv2rgb((double)h, 100, (double)v, &re, &g, &b);
+
+                int ti = (int)h + 360 * (int)v;
+                ti *= 3;
+                r->colorParams->clut[ti] = (float)re;
+                r->colorParams->clut[ti+1] = (float)g;
+                r->colorParams->clut[ti+2] = (float)b;
+            }
+        }
+    }
+
     return r;
 }
 
@@ -179,16 +206,23 @@ void Render3_GetDisplayXY(Render3_GridPoint_t *g, int w, int h, int *x, int *y) 
     *y = yv;
 }
 
+// https://github.com/ekmett/approximate/blob/master/cbits/fast.c
+float powf_fast(float a, float b) {
+  union { float d; int x; } u = { a };
+  u.x = (int)(b * (u.x - 1064866805) + 1064866805);
+  return u.d;
+}
+
 Render3_GridPoint_t Render3_ApplyWarp(Render3_GridPoint_t *g, float w, float s) {
     Render3_GridPoint_t p;
-    if (g->x <= 0) p.x = powf(g->x + 1., w) - 1.;
-    else p.x = 1. - powf(1. - g->x, w);
+    if (g->x <= 0) p.x = powf_fast(g->x + 1., w) - 1.;
+    else p.x = 1. - powf_fast(1. - g->x, w);
     if (g->y <= 0) {
         s = (1. + g->y / 2) * s;
-        p.y = powf(g->y + 1., s) - 1.;
+        p.y = powf_fast(g->y + 1., s) - 1.;
     } else {
         s = (1. - g->y / 2) * s;
-        p.y = 1. - powf(1 - g->y, s);
+        p.y = 1. - powf_fast(1 - g->y, s);
     }
     return p;
 }
